@@ -18,9 +18,13 @@ def generate_user():
 
     return {
         "name": fake.name(),
-        "address": fake.address(),
         "email": fake.email(),
         "phone_number": fake.phone_number(),
+        "address": fake.address(),
+        "city": fake.city(),
+        "postal_code": fake.postcode(),
+        "dob": fake.date_of_birth(),
+        "company": fake.company(),
     }
 
 
