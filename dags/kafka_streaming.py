@@ -1,9 +1,13 @@
 from airflow import DAG
-from time import sleep, time
+from airflow.decorators import task
+from airflow.operators.python import PythonOperator
 from datetime import datetime
-from random import uniform
 from faker import Faker
-
+from json import dumps
+from kafka import KafkaProducer
+from random import uniform
+from time import sleep
+from typing import Any
 
 
 default_args = {
@@ -15,7 +19,7 @@ fake = Faker()
 
 def generate_user():
     sleep(uniform(0.0, 1.5))
-
+    
     return {
         "name": fake.name(),
         "email": fake.email(),
@@ -23,35 +27,31 @@ def generate_user():
         "address": fake.address(),
         "city": fake.city(),
         "postal_code": fake.postcode(),
-        "dob": fake.date_of_birth(),
+        "dob": fake.date_of_birth().isoformat(),
         "company": fake.company(),
     }
 
 
-# dag = DAG(
-#     'user_automation',
-#     default_args=default_args,
-#     description='Kafka streaming DAG',
-#     schedule_interval='@daily',
-#     catchup=False,
-# )
+def stream_user(user: dict[str, Any]):
+    producer = KafkaProducer(
+        bootstrap_servers="broker:29092",  # <-- Very important!
+        value_serializer=lambda v: dumps(v).encode("utf-8"),
+    )
+    print(f"User: {user['name']}, Email: {user['email']}")
+    producer.send("user", value=user)
+    producer.flush()
+    producer.close()
+
 
 with DAG(
-    "user_automation",
+    dag_id="kafka_user_streaming",
     default_args=default_args,
-    description="Kafka streaming DAG",
-    schedule_interval="@daily",
+    start_date=datetime(2024, 1, 1),
+    schedule=None,  # You can change this to '*/5 * * * *' or similar
     catchup=False,
-    start_date=datetime(2025, 3, 1),
+    tags=["kafka", "streaming"],
 ) as dag:
-    pass
 
-
-for i in range(10):
-    start_time = time()
-    user = generate_user()
-    end_time = time()
-    execution_time = end_time - start_time
-    print(f"Execution {i+1}: {execution_time} seconds. User: {user}")
-
-    generate_user()
+    streaming_task = PythonOperator(
+        task_id="stream_user_from_faker", python_callable=stream_user
+    )
